@@ -9,6 +9,12 @@ import sentry_sdk
 from sentry_sdk.integrations.flask import FlaskIntegration
 from vectors_blueprint import vectors_blueprint
 
+from handlers.distribution import (
+    get_groundtruths_distribution, get_predictions_distribution, 
+    get_entropy_distribution, get_mislabeling_distribution,
+    get_tag_distribution
+)
+
 ENVIRONMENT = os.environ['ENVIRONMENT']
 COMMIT_REF = os.environ.get('COMMIT_REF')
 
@@ -85,9 +91,10 @@ def handle_unexpected_error(error):
 @app.route('/distribution/groundtruths', methods = ['POST'])
 def distribution_groundtruths():
     data = request.json
+    organization_id = request.headers.get('x-organization-id')
 
     result = get_groundtruths_distribution(
-        organization_id=data['organization_id'],
+        organization_id=organization_id,
         filters=data['filters'],
     )
 
@@ -96,9 +103,10 @@ def distribution_groundtruths():
 @app.route('/distribution/predictions', methods = ['POST'])
 def distribution_predictions():
     data = request.json
+    organization_id = request.headers.get('x-organization-id')
 
     result = get_predictions_distribution(
-        organization_id=data['organization_id'],
+        organization_id=organization_id,
         filters=data['filters'],
     )
 
@@ -107,9 +115,10 @@ def distribution_predictions():
 @app.route('/distribution/entropy', methods = ['POST'])
 def distribution_entropy():
     data = request.json
+    organization_id = request.headers.get('x-organization-id')
 
     result = get_entropy_distribution(
-        organization_id=data['organization_id'],
+        organization_id=organization_id,
         datapoint_ids=data['datapoint_ids'],
         model_name=data['model_name'],
     )
@@ -119,9 +128,10 @@ def distribution_entropy():
 @app.route('/distribution/mislabeling', methods = ['POST'])
 def distribution_mislabeling():
     data = request.json
+    organization_id = request.headers.get('x-organization-id')
 
     result = get_mislabeling_distribution(
-        organization_id=data['organization_id'],
+        organization_id=organization_id,
         datapoint_filters=data['datapoint_filters'],
         model_name=data['model_name'],
         dataset_id=data.get('dataset_id', None),
@@ -132,9 +142,10 @@ def distribution_mislabeling():
 @app.route('/distribution/tag', methods = ['POST'])
 def distribution_tags():
     data = request.json
+    organization_id = request.headers.get('x-organization-id')
 
     result = get_tag_distribution(
-        organization_id=data['organization_id'],
+        organization_id=organization_id,
         datapoint_filters=data['datapoint_filters'],
         dataset_id=data.get('dataset_id', None),
         tag_name=data['tag_name'],

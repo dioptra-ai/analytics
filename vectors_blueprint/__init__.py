@@ -11,9 +11,10 @@ vectors_blueprint = Blueprint('vectors_blueprint', __name__)
 
 @vectors_blueprint.route('/reduce-dimensions', methods=['POST'])
 def handle_reduce_dimension():
+    organization_id = request.headers.get('x-organization-id')
     parameters = request.json
     vector_ids = frontend_client.find_vector_ids_for_datapoints(
-        organization_id=parameters['organization_id'],
+        organization_id=organization_id,
         type='EMBEDDINGS',
         filters=parameters['datapoint_filters'],
         model_name=parameters['embeddings_name'], # TODO: Fix this inconsistency. This can include layer names, which isn't a model name.
