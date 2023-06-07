@@ -61,7 +61,7 @@ def _get_distribution_for_labels(organization_id, for_table, filters=[]):
         # Otherwise, compute the distribution.
         labels = select_labels(
             organization_id=organization_id,
-            columns=['task_type', 'lanes.id', 'class_name', 'datapoint'],
+            columns=['task_type', 'lanes.id', 'bboxes.class_name', 'class_name', 'datapoint'],
             filters=filters
         )
 
@@ -104,6 +104,22 @@ def _get_distribution_for_labels(organization_id, for_table, filters=[]):
                         }
                         for name, value in counts.items()
                     },  
+                    'task_type': task_type
+                }
+            elif task_type == 'INSTANCE_SEGMENTATION' or task_type == 'OBJECT_DETECTION':
+                exploded_bboxes = labels.explode('bboxes')
+                exploded_bboxes['class_name'] = exploded_bboxes['bboxes'].apply(pd.Series)['class_name']
+                num_bboxes_by_bbox_class_name = Counter(exploded_bboxes['class_name'].values)
+                datapoints_by_bbox_class_name = exploded_bboxes.groupby('class_name')['datapoint'].apply(list)
+
+                return {
+                    'histogram': {
+                        str(name): {
+                            'value': value,
+                            'datapoints': datapoints_by_bbox_class_name.get(name, [])
+                        }
+                        for name, value in num_bboxes_by_bbox_class_name.items()
+                    },
                     'task_type': task_type
                 }
             else:
