@@ -19,6 +19,14 @@ def get_predictions_with_metrics(organization_id, datapoint_ids, model_name):
                         'entropy', SUM(lane_metrics.entropy),
                         'variance', SUM(lane_metrics.variance)
                     )
+                    WHEN predictions.task_type = 'COMPLETION' THEN
+                    COALESCE(predictions.metrics, '{}') || jsonb_build_object(
+                        'entropy', SUM((completions.metrics->>'entropy')::float),
+                        'evaluation_score', AVG((completions.metrics->>'evaluation_score')::float),
+                        'rlhf_score', AVG((completions.metrics->>'rlhf_score')::float),
+                        'feedback_score', AVG((completions.metrics->>'feedback_score')::float),
+                        'hallucination_score', AVG((completions.metrics->>'hallucination_score')::float)
+                    )
                 ELSE
                     predictions.metrics
                 END as metrics,
@@ -26,6 +34,7 @@ def get_predictions_with_metrics(organization_id, datapoint_ids, model_name):
                 datapoint
             FROM predictions
             LEFT JOIN bboxes ON bboxes.prediction = predictions.id
+            LEFT JOIN completions ON completions.prediction = predictions.id
             LEFT JOIN (
                 -- Entropies and variances for each lane.
                 SELECT SUM((lane_classifications.classification->'metrics'->'entropy')::FLOAT) as entropy,

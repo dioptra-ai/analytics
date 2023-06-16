@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import math
 from collections import Counter
 from sqlalchemy import text
 
@@ -33,10 +32,16 @@ def _get_distribution_for_labels(organization_id, for_table, datapoint_filters=[
         dataset_id=dataset_id
     )
 
+    if len(datapoints) == 0:
+        return {
+            'histogram': {},
+            'task_type': None
+        }
+
     # select_labels = frontend_client.select_groundtruths if for_table == 'groundtruths' else frontend_client.select_predictions
     labels = frontend_client.select_groundtruths(
         organization_id=organization_id,
-        columns=['task_type', 'lanes.id', 'bboxes.class_name', 'class_name', 'datapoint'],
+        columns=['task_type', 'lanes.id', 'bboxes.class_name', 'completions.text', 'class_name', 'datapoint'],
         filters=[{
             'left': 'datapoint',
             'op': 'in',
@@ -44,7 +49,7 @@ def _get_distribution_for_labels(organization_id, for_table, datapoint_filters=[
         }],
     ) if for_table == 'groundtruths' else frontend_client.select_predictions(
         organization_id=organization_id,
-        columns=['task_type', 'lanes.id', 'bboxes.class_name', 'class_name', 'datapoint'],
+        columns=['task_type', 'lanes.id', 'bboxes.class_name', 'completions.text', 'class_name', 'datapoint'],
         filters=[{
             'left': 'datapoint',
             'op': 'in',
@@ -120,10 +125,35 @@ def _get_distribution_for_labels(organization_id, for_table, datapoint_filters=[
                 },
                 'task_type': task_type
             }
+        elif task_type == 'COMPLETION':
+            exploded_completions = labels.explode('completions')
+            if not 'text' in exploded_completions['completions'].apply(pd.Series):
+                return {
+                    'histogram': {},
+                    'task_type': task_type
+                }
+            
+            exploded_completions['text'] = exploded_completions['completions'].apply(pd.Series)['text']
+            exploded_completions['token_length'] = exploded_completions['text'].apply(lambda t: len(t.split(' ')))
+            # Remove rows that have nan text
+            exploded_completions = exploded_completions[~exploded_completions['text'].isna()]
+            token_length_by_completion_text = Counter(len(t.split(' ')) for t in exploded_completions['text'].to_list() if t)
+            sorted_token_length_by_completion_text = sorted(token_length_by_completion_text.items(), reverse=False)
+            datapoints_by_completion_text = exploded_completions.groupby('token_length')['datapoint'].apply(list)
+
+            return {
+                'histogram': {
+                    str(name): {
+                        'datapoints': datapoints_by_completion_text.get(name, [])
+                    }
+                    for i, (name, _) in enumerate(sorted_token_length_by_completion_text)
+                },
+                'task_type': task_type
+            }
         else:
             raise NotImplementedError(f'{for_table} distribution not available for task type {task_type}.')
 
-def get_entropy_distribution(organization_id, datapoint_filters, model_name, dataset_id):
+def get_metric_distribution(organization_id, metric, datapoint_filters, model_name, dataset_id):
     datapoints = frontend_client.select_datapoints(
         organization_id=organization_id,
         columns=['id'],
@@ -142,16 +172,15 @@ def get_entropy_distribution(organization_id, datapoint_filters, model_name, dat
     if len(task_types) > 1:
         raise UserWarning(f'Entropy distribution not available for multiple task types.')
 
-    all_entropies = [e if e is not None and not np.isnan(e) else 0 for e in model_metrics['metrics'].apply(lambda m: m['entropy']).values]
+    metric_values = [e if e is not None and not np.isnan(e) else 0 for e in model_metrics['metrics'].apply(lambda m: m.get(metric, None)).values]
 
-    if all_entropies:
-        if task_types[0] == 'LANE_DETECTION' or task_types[0] == 'INSTANCE_SEGMENTATION' or task_types[0] == 'OBJECT_DETECTION':
-            histogram, bins = np.histogram(all_entropies, bins=10)
+    if metric_values:
+        histogram, bins = np.histogram(metric_values, bins=10)
 
         return {
             'histogram': {
                 f'{bins[i]:.2f} - {bins[i+1]:.2f}': {
-                    'datapoints': model_metrics[(bins[i] <= all_entropies) & (all_entropies < bins[i+1])]['datapoint'].values.tolist(),
+                    'datapoints': model_metrics[(bins[i] <= metric_values) & (metric_values < bins[i+1])]['datapoint'].values.tolist(),
                     'index': i
                 } for i, _ in enumerate(histogram)
             },

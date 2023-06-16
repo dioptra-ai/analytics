@@ -11,7 +11,7 @@ from vectors_blueprint import vectors_blueprint
 
 from handlers.distribution import (
     get_groundtruths_distribution, get_predictions_distribution, 
-    get_entropy_distribution, get_mislabeling_distribution,
+    get_metric_distribution, get_mislabeling_distribution,
     get_tag_distribution
 )
 
@@ -114,19 +114,6 @@ def distribution_predictions():
 
     return jsonify(result)
 
-@app.route('/distribution/entropy', methods = ['POST'])
-def distribution_entropy():
-    data = request.json
-
-    result = get_entropy_distribution(
-        organization_id=data['organization_id'],
-        datapoint_filters=data['filters'],
-        model_name=data['modelName'],
-        dataset_id=data.get('datasetId', None),
-    )
-
-    return jsonify(result)
-
 @app.route('/distribution/mislabeling', methods = ['POST'])
 def distribution_mislabeling():
     data = request.json
@@ -149,6 +136,20 @@ def distribution_tags(tag_name):
         datapoint_filters=data['filters'],
         dataset_id=data.get('datasetId', None),
         tag_name=tag_name
+    )
+
+    return jsonify(result)
+
+@app.route('/distribution/<metric>', methods = ['POST'])
+def distribution_metric(metric):
+    data = request.json
+
+    result = get_metric_distribution(
+        organization_id=data['organization_id'],
+        metric=metric,
+        datapoint_filters=data['filters'],
+        model_name=data['modelName'],
+        dataset_id=data.get('datasetId', None),
     )
 
     return jsonify(result)
